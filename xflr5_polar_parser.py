@@ -8,6 +8,7 @@ robot@seas.upenn.edu
 """
 
 import argparse
+import glob
 import pandas as pd
 
 
@@ -50,11 +51,12 @@ def parse_polar(raw_txt):
         Raw_txt should be a list of strings corresponding to lines of
         the file.
     """
-    header_str = '  alpha     CL        CD       CDp       Cm    Top Xtr Bot Xtr   Cpmin    Chinge    XCp\n'  # noqa: E501
-    header_list_raw = ['alpha', 'CL', 'CD', 'CDp', 'Cm', 'Top Xtr', 'Bot Xtr', 'Cpmin', 'Chinge', 'XCp']
+    header_list_raw = ['alpha', 'CL', 'CD', 'CDp', 'Cm', 'Top Xtr',
+                       'Bot Xtr', 'Cpmin', 'Chinge', 'XCp']
     header_list = header_list_raw[:]
     header_list.append('deflection')
-    header_index = raw_txt.index(header_str)
+
+    header_index = 9  # raw_txt.index(header_str)
     data_start_index = header_index + 2
 
     # Make a dictionary with values of empty lists
@@ -65,7 +67,6 @@ def parse_polar(raw_txt):
 
     # Get the deflection:
     deflection = get_deflection(raw_txt)
-    print('deflection %f' % deflection)
 
     # iterate through all the data
     for i in range(data_start_index, len(raw_txt)):
@@ -76,25 +77,39 @@ def parse_polar(raw_txt):
 
 def main(args):
     """Main function, takes args.i and args.o"""
-    input_file = args.i
-    inputfile2 = args.ii
     output_file = args.o
 
-    # Read the file:
-    with open(input_file) as f:
-        raw_txt = f.readlines()
+    # Get the list of files
+    foil_files = []
+    if args.f is not None:
+        foil_files = glob.glob(args.f + "*.txt")
+    elif args.i is not None:
+        foil_files = [args.i]
+    else:
+        raise ValueError('No input file or folder was given!')
 
-    data_dictionary = parse_polar(raw_txt)
+    # Which ones are we using?
+    print('Parsing foil files:')
+    [print(f) for f in foil_files]
 
-    with open(inputfile2) as f:
-        raw_txt2 = f.readlines()
+    # Read the files and assemble a list of dataframes
+    dfs = []  # Dataframes
+    for input_file in foil_files:
+        with open(input_file) as f:
+            raw_txt = f.readlines()
+        data_dictionary = parse_polar(raw_txt)
+        df = pd.DataFrame.from_dict(data_dictionary)
+        dfs.append(df)
 
-    data_dictionary2 = parse_polar(raw_txt2)
+    # Combine dataframes
+    combined_df = dfs[0]
+    for df in dfs[1:]:
+        combined_df = combined_df.append(df, ignore_index=True)
 
-    df = pd.DataFrame.from_dict(data_dictionary)
-    df2 = pd.DataFrame.from_dict(data_dictionary2)
-    df = df.append(df2, ignore_index=True)
-    df.to_csv(output_file)
+    # Write CSV
+    combined_df.to_csv(output_file)
+
+    # Done
     print("Wrote file to %s." % output_file)
 
 
@@ -102,7 +117,7 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Convert XFLR5 polar from txt to csv.')
     parser.add_argument('-i', type=str, help='input file', default='testPolar.txt')
-    parser.add_argument('-ii', type=str, help='input file', default='testPolar.txt')
+    parser.add_argument('-f', type=str, help='input folder', default=None)
     parser.add_argument('-o', type=str, help='output file', default='testPolar.csv')
     args = parser.parse_args()
     main(args)
